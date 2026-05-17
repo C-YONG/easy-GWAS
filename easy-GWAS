@@ -95,5 +95,24 @@ if [ "$CMD" = "batch" ]; then
     exit 0
 fi
 
+# ── plot ──
+PLOT_GEC=""
+PLOT_FMT="jpg"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --gec) PLOT_GEC="--gec"; shift;;
+        --png) PLOT_FMT="png"; shift;;
+        --format) PLOT_FMT="$2"; shift 2;;
+        *) break;;
+    esac
+done
+
+if [ "$CMD" = "plot" ]; then
+    GWAS_FILE="$1"
+    OUT_PREFIX="$2"
+    Rscript "$SCRIPT_DIR/lib/plot_gwas.R" "$GWAS_FILE" "$OUT_PREFIX" $PLOT_GEC "--$PLOT_FMT"
+    exit 0
+fi
+
 echo "Unknown command: $CMD. Try 'easy-GWAS help'."
 exit 1

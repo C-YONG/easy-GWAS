@@ -85,6 +85,15 @@ N_VAR=$(wc -l < "$TDIR/plink/${LABEL}.bim")
 N_SAM=$(wc -l < "$TDIR/plink/${LABEL}.fam")
 echo "  $N_VAR variants × $N_SAM samples"
 
+# Compute effective number of independent tests (GEC) via PLINK LD pruning
+echo "  Computing GEC (--indep-pairwise 50 5 0.2)..."
+$PLINK --bfile "$TDIR/plink/${LABEL}" \
+    --indep-pairwise 50 5 0.2 \
+    --out "$TDIR/plink/${LABEL}_ld" --silent 2>/dev/null || true
+N_EFF=$(wc -l < "$TDIR/plink/${LABEL}_ld.prune.in" 2>/dev/null || echo "$N_VAR")
+echo "$N_EFF" > "$TDIR/plink/.neff"
+echo "  Neff = $N_EFF"
+
 # ══ 3. Phenotype ══
 echo "[3/5] Preparing phenotype..."
 python3 - "$PHENO_CSV" "$TDIR" "$LABEL" "$TRAIT_COL" << 'PYEOF'
