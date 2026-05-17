@@ -85,8 +85,8 @@ N_VAR=$(wc -l < "$TDIR/plink/${LABEL}.bim")
 N_SAM=$(wc -l < "$TDIR/plink/${LABEL}.fam")
 echo "  $N_VAR variants × $N_SAM samples"
 
-# Compute effective number of independent tests (GEC) via PLINK LD pruning
-echo "  Computing GEC (--indep-pairwise 50 5 0.2)..."
+# GEC: Li & Ji (2005) via PLINK --indep-pairwise (GWAS standard)
+echo "  Computing GEC (PLINK --indep-pairwise 50 5 0.2)..."
 $PLINK --bfile "$TDIR/plink/${LABEL}" \
     --indep-pairwise 50 5 0.2 \
     --out "$TDIR/plink/${LABEL}_ld" --silent 2>/dev/null || true
