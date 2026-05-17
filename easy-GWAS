@@ -34,7 +34,7 @@ shift 2>/dev/null || true
 # ── help / install (no tools needed) ──
 if [ "$CMD" = "help" ] || [ "$CMD" = "-h" ] || [ "$CMD" = "--help" ]; then
     cat << 'HELP'
-easy-GWAS — GWAS with GCTA-LOCO + GEMMA-LMM
+easy-GWAS — GWAS with GCTA-LOCO + GCTA-MLMA + GEMMA-LMM
 
 Usage:
   easy-GWAS [--out DIR] [--trait N] single <VCF> <pheno.csv> <SNP|INDEL|SV>
@@ -48,7 +48,8 @@ Options:
 Phenotype CSV: FID,trait1,trait2,... (header, NA=missing)
 
 Output per type:
-  gcta/gwas.loco.mlma     GCTA LOCO results (Chr, bp, p)
+  gcta/gwas_loco.loco.mlma  GCTA LOCO results
+  gcta/gwas_mlma.mlma       GCTA MLMA results (non-LOCO) (Chr, bp, p)
   gemma/*_gwas.assoc.txt  GEMMA LMM results (chr, ps, p_wald)
 HELP
     exit 0

@@ -119,20 +119,35 @@ n_valid = sum(1 for v in phe_dict.values())
 print(f"  {n_valid} phenotyped, {len(fam_ids)} total")
 PYEOF
 
-# ══ 4. GCTA LOCO GWAS ══
-echo "[4/5] GCTA LOCO GWAS..."
+# ══ 4a. GCTA LOCO GWAS ══
+echo "[4/6] GCTA LOCO GWAS..."
 if $GCTA --mlma-loco --bfile "$TDIR/plink/${LABEL}" \
     --pheno "$TDIR/gcta/pheno.txt" \
-    --out "$TDIR/gcta/gwas" --threads 8 2>"$TDIR/gcta/gcta.err"; then
-    N_HITS=$(awk 'NR>1 && $9<1e-5' "$TDIR/gcta/gwas.loco.mlma" 2>/dev/null | wc -l)
-    echo "  GCTA: done ($N_HITS hits at p<1e-5)"
+    --out "$TDIR/gcta/gwas_loco" --threads 8 2>"$TDIR/gcta/gcta_loco.err"; then
+    N_HITS=$(awk 'NR>1 && $9<1e-5' "$TDIR/gcta/gwas_loco.loco.mlma" 2>/dev/null | wc -l)
+    echo "  GCTA-LOCO: done ($N_HITS hits at p<1e-5)"
 else
     ERRORS=$((ERRORS+1))
-    echo "  GCTA: FAILED (see $TDIR/gcta/gcta.err)"
+    echo "  GCTA-LOCO: FAILED (see $TDIR/gcta/gcta_loco.err)"
 fi
 
-# ══ 5. GEMMA LMM GWAS ══
-echo "[5/5] GEMMA GWAS..."
+# ══ 4b. GCTA MLMA (non-LOCO, with GRM) ══
+echo "[5/6] GCTA MLMA..."
+if $GCTA --bfile "$TDIR/plink/${LABEL}" --make-grm-bin \
+    --out "$TDIR/gcta/grm" --threads 8 2>"$TDIR/gcta/gcta_grm.err" && \
+   $GCTA --mlma --bfile "$TDIR/plink/${LABEL}" \
+    --grm "$TDIR/gcta/grm" \
+    --pheno "$TDIR/gcta/pheno.txt" \
+    --out "$TDIR/gcta/gwas_mlma" --threads 8 2>"$TDIR/gcta/gcta_mlma.err"; then
+    N_HITS=$(awk 'NR>1 && $9<1e-5' "$TDIR/gcta/gwas_mlma.mlma" 2>/dev/null | wc -l)
+    echo "  GCTA-MLMA: done ($N_HITS hits at p<1e-5)"
+else
+    ERRORS=$((ERRORS+1))
+    echo "  GCTA-MLMA: FAILED (see $TDIR/gcta/gcta_mlma.err)"
+fi
+
+# ══ 6. GEMMA LMM GWAS ══
+echo "[6/6] GEMMA GWAS..."
 awk '{$6=0; print}' OFS='\t' "$TDIR/plink/${LABEL}.fam" > "$TDIR/gemma/${LABEL}.fam"
 cp "$TDIR/plink/${LABEL}.bed" "$TDIR/gemma/${LABEL}.bed"
 cp "$TDIR/plink/${LABEL}.bim" "$TDIR/gemma/${LABEL}.bim"
@@ -155,8 +170,9 @@ cd - > /dev/null
 # ══ Summary ══
 echo ""
 echo "═══ $LABEL GWAS complete ═══"
-echo "  GCTA:  $TDIR/gcta/gwas.loco.mlma"
-echo "  GEMMA: $TDIR/gemma/${LABEL}_gwas.assoc.txt"
+echo "  GCTA-LOCO:  $TDIR/gcta/gwas_loco.loco.mlma"
+echo "  GCTA-MLMA:  $TDIR/gcta/gwas_mlma.mlma"
+echo "  GEMMA:      $TDIR/gemma/${LABEL}_gwas.assoc.txt"
 if [ $ERRORS -gt 0 ]; then
     echo "  WARNING: $ERRORS tool(s) failed — check *.err files"
 fi
