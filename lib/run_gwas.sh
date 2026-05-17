@@ -60,6 +60,20 @@ with open(f"{tdir}/sample_order.txt", 'w') as f:
         f.write(f"0 {iid}\n")
 PYEOF
 
+# Check overlap before sorting
+N_PHENO=$(wc -l < "$TDIR/sample_order.txt")
+N_VCF=$(wc -l < "$TDIR/plink/${LABEL}_tmp.fam")
+VCF_IDS=$(awk '{print $2}' "$TDIR/plink/${LABEL}_tmp.fam")
+PHENO_IDS=$(awk '{print $2}' "$TDIR/sample_order.txt")
+MATCHED=$(comm -12 <(echo "$VCF_IDS" | sort) <(echo "$PHENO_IDS" | sort) | wc -l)
+echo "  VCF: $N_VCF samples, Pheno: $N_PHENO samples, Overlap: $MATCHED"
+if [ "$MATCHED" -eq 0 ]; then
+    echo "ERROR: No samples overlap between VCF and phenotype!"
+    echo "VCF first 5 IDs: $(echo "$VCF_IDS" | head -5 | tr '\n' ' ')"
+    echo "Pheno first 5 IDs: $(echo "$PHENO_IDS" | head -5 | tr '\n' ' ')"
+    exit 1
+fi
+
 $PLINK --bfile "$TDIR/plink/${LABEL}_tmp" \
     --keep "$TDIR/sample_order.txt" \
     --indiv-sort f "$TDIR/sample_order.txt" \
