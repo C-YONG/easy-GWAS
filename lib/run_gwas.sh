@@ -85,14 +85,27 @@ N_VAR=$(wc -l < "$TDIR/plink/${LABEL}.bim")
 N_SAM=$(wc -l < "$TDIR/plink/${LABEL}.fam")
 echo "  $N_VAR variants × $N_SAM samples"
 
-# GEC: Li & Ji (2005) via PLINK --indep-pairwise (GWAS standard)
-echo "  Computing GEC (PLINK --indep-pairwise 50 5 0.2)..."
-$PLINK --bfile "$TDIR/plink/${LABEL}" \
-    --indep-pairwise 50 5 0.2 \
-    --out "$TDIR/plink/${LABEL}_ld" --silent 2>/dev/null || true
-N_EFF=$(wc -l < "$TDIR/plink/${LABEL}_ld.prune.in" 2>/dev/null || echo "$N_VAR")
+# GEC: Genetic Type I Error Calculator (Li et al. 2012)
+echo "  Computing GEC (official software)..."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+JAVA="$(find "$SCRIPT_DIR/../bin/jre" -name java -type f 2>/dev/null | head -1)"
+if [ -n "$JAVA" ] && [ -f "$SCRIPT_DIR/../bin/gec/gec.jar" ]; then
+    $JAVA -jar -Xmx2g "$SCRIPT_DIR/../bin/gec/gec.jar" --effect-number \
+        --plink-binary "$TDIR/plink/${LABEL}" --genome --maf 0 \
+        --out "$TDIR/plink/gec_out" 2>/dev/null || true
+    if [ -f "$TDIR/plink/gec_out.sum" ]; then
+        N_EFF=$(awk 'NR==2{print $2}' "$TDIR/plink/gec_out.sum")
+        [ -z "$N_EFF" ] && N_EFF="$N_VAR"
+    else
+        N_EFF="$N_VAR"
+    fi
+else
+    $PLINK --bfile "$TDIR/plink/${LABEL}" --indep-pairwise 50 5 0.2 \
+        --out "$TDIR/plink/${LABEL}_ld" --silent 2>/dev/null || true
+    N_EFF=$(wc -l < "$TDIR/plink/${LABEL}_ld.prune.in" 2>/dev/null || echo "$N_VAR")
+fi
 echo "$N_EFF" > "$TDIR/plink/.neff"
-echo "  Neff = $N_EFF"
+echo "  Neff = $N_EFF (GEC)"
 
 # ══ 3. Phenotype ══
 echo "[3/5] Preparing phenotype..."
