@@ -1,0 +1,4 @@
+bin/*
+!bin/.gitkeep
+easy-gwas-out/
+*.log
