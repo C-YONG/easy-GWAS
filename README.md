@@ -1,29 +1,27 @@
 # easy-GWAS
 
-**Three-method GWAS (GCTA-LOCO + GCTA-MLMA + GEMMA-LMM) with GEC support.**
-
-Estimates effective number of independent tests using the official GEC software (Li et al. 2012) and generates Manhattan + QQ plots.
+**Four-method GWAS (GCTA-LOCO + GCTA-MLMA + GEMMA-LMM + LDAK-KVIK) with GEC support.**
 
 ## Install
 
 ```bash
 git clone https://github.com/C-YONG/easy-GWAS.git
 cd easy-GWAS
-bash install.sh                            # GCTA + GEMMA + GEC + Java JRE
+bash install.sh                            # GCTA + GEMMA + LDAK + GEC + Java JRE
 conda install -c bioconda bcftools plink2
 ```
 
 ## Quick start
 
 ```bash
-# Single variant type (3 methods)
-easy-GWAS --out results/ single snp.vcf.gz pheno.csv SNP
+# Single variant type (4 methods)
+easy-GWAS --pca 5 --out results/ single snp.vcf.gz pheno.csv SNP
 
 # All three types
-easy-GWAS --out results/ batch snp.vcf.gz indel.vcf.gz sv.vcf.gz pheno.csv
+easy-GWAS --pca 5 --out results/ batch snp.vcf.gz indel.vcf.gz sv.vcf.gz pheno.csv
 
 # Manhattan + QQ plots (with GEC thresholds)
-easy-GWAS plot --gec results/SNP/gcta/gwas_loco.loco.mlma SNP_trait
+easy-GWAS plot --gec results/SNP/gcta/gwas_loco.loco.mlma SNP_TD
 ```
 
 ## GWAS methods
@@ -31,12 +29,21 @@ easy-GWAS plot --gec results/SNP/gcta/gwas_loco.loco.mlma SNP_trait
 | Method | Software | Description |
 |--------|----------|-------------|
 | LOCO | GCTA | Leave-one-chromosome-out (gold standard) |
-| MLMA | GCTA | Mixed linear model with full GRM (faster) |
+| MLMA | GCTA | Mixed linear model with full GRM |
 | LMM | GEMMA | Mixed linear model with Wald test + pve |
+| KVIK | LDAK | Elastic net + PCA (default 5 PCs, Nature Genetics 2024) |
+
+## Options
+
+```
+--out DIR     Output directory (default: ./easy-gwas-out)
+--trait N     Trait column (0=FID, 1=first trait, default: 1)
+--pca N       Number of PCs for LDAK-KVIK (default: 5, 0=skip KVIK)
+```
 
 ## GEC
 
-The official GEC v0.2 (Li et al. 2012, pmglab.top) computes the effective number of independent tests via eigenvalue decomposition of the LD matrix. Used for significance thresholds in plots.
+The official GEC v0.2 (Li et al. 2012, pmglab.top) computes effective independent tests via eigenvalue decomposition of the LD matrix. Used for significance thresholds in plots.
 
 ## Output
 
@@ -46,9 +53,11 @@ results/SV/
 │   ├── gwas_loco.loco.mlma   GCTA LOCO (Chr bp p)
 │   └── gwas_mlma.mlma        GCTA MLMA
 ├── gemma/
-│   └── SV_gwas.assoc.txt     GEMMA LMM (chr ps p_wald)
+│   └── SV_gwas.assoc.txt     GEMMA (chr ps p_wald)
+├── ldak/
+│   └── SV_kvik.step2.assoc   LDAK-KVIK (Wald_P)
 └── plink/
-    └── gec_out.sum           GEC: Neff + thresholds
+    └── gec_out.sum           GEC Neff + thresholds
 ```
 
 ## Filtering defaults
