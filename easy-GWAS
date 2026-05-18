@@ -1,28 +1,22 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# easy-GWAS — Two-tool GWAS (GCTA-LOCO + GEMMA-LMM)
-#
-# Usage:
-#   easy-GWAS [--out DIR] [--trait N] single <VCF> <pheno.csv> <SNP|INDEL|SV>
-#   easy-GWAS [--out DIR] [--trait N] batch  <snp.vcf> <indel.vcf> <sv.vcf> <pheno.csv>
-#   easy-GWAS install
+# easy-GWAS — GCTA-LOCO + GCTA-MLMA + GEMMA + LDAK-KVIK
 # ═══════════════════════════════════════════════════════════════
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Defaults
 OUTDIR="./easy-gwas-out"
-TRAIT_COL=1
+TRAIT_COL=1; N_PCA=5
 MAF_SNP=0.05; GENO_SNP=0.05
 MAF_INDEL=0.05; GENO_INDEL=0.05
 MAF_SV=0.01; GENO_SV=0.20
 
-# Parse flags (before command)
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --out) OUTDIR="$2"; shift 2;;
         --trait) TRAIT_COL="$2"; shift 2;;
+        --pca) N_PCA="$2"; shift 2;;
         -h|--help) CMD=help; shift;;
         *) break;;
     esac
@@ -31,26 +25,23 @@ done
 CMD="${1:-help}"
 shift 2>/dev/null || true
 
-# ── help / install (no tools needed) ──
-if [ "$CMD" = "help" ] || [ "$CMD" = "-h" ] || [ "$CMD" = "--help" ]; then
+if [ "$CMD" = "help" ] || [ "$CMD" = "-h" ]; then
     cat << 'HELP'
-easy-GWAS — GWAS with GCTA-LOCO + GCTA-MLMA + GEMMA-LMM
+easy-GWAS — GWAS + Plotting (GCTA-LOCO + GCTA-MLMA + GEMMA + LDAK-KVIK)
 
-Usage:
-  easy-GWAS [--out DIR] [--trait N] single <VCF> <pheno.csv> <SNP|INDEL|SV>
-  easy-GWAS [--out DIR] [--trait N] batch  <snp.vcf> <indel.vcf> <sv.vcf> <pheno.csv>
-  easy-GWAS install
+Commands:
+  install                               Download GCTA + GEMMA + LDAK + GEC
+  single  <VCF> <pheno.csv> <SNP|INDEL|SV>  Run GWAS
+  batch   <snp.vcf> <indel.vcf> <sv.vcf> <pheno.csv>  All three types
+  plot    <result> <prefix>                  Manhattan + QQ
 
 Options:
   --out DIR     Output directory (default: ./easy-gwas-out)
-  --trait N     Trait column in CSV (0=FID, 1=first trait, default: 1)
+  --trait N     Trait column (0=FID, 1=first trait, default: 1)
+  --pca N       Number of PCs for LDAK-KVIK (default: 5, 0=skip KVIK)
+  --gec         GEC-corrected thresholds (plot only)
 
-Phenotype CSV: FID,trait1,trait2,... (header, NA=missing)
-
-Output per type:
-  gcta/gwas_loco.loco.mlma  GCTA LOCO results
-  gcta/gwas_mlma.mlma       GCTA MLMA results (non-LOCO) (Chr, bp, p)
-  gemma/*_gwas.assoc.txt  GEMMA LMM results (chr, ps, p_wald)
+Phenotype CSV: FID,trait1,... (header, NA=missing)
 HELP
     exit 0
 fi
@@ -60,44 +51,48 @@ if [ "$CMD" = "install" ]; then
     exit 0
 fi
 
-# ── find tools ──
 find_tool() {
     for p in "$SCRIPT_DIR/bin/$1" "$(which "$1" 2>/dev/null)"; do
         if [ -x "$p" ]; then echo "$p"; return 0; fi
     done
-    echo "ERROR: $1 not found. Run 'easy-GWAS install' first." >&2
-    exit 1
+    return 1
 }
 
 export BCFTOOLS="${BCFTOOLS:-$(which bcftools 2>/dev/null || echo bcftools)}"
 export PLINK="${PLINK:-$(which plink2 2>/dev/null || echo plink2)}"
 GCTA=$(find_tool gcta64)
 GEMMA=$(find_tool gemma)
+LDAK=$(find_tool ldak6.2 2>/dev/null || echo "")
 
 # ── single ──
 if [ "$CMD" = "single" ]; then
     bash "$SCRIPT_DIR/lib/run_gwas.sh" "$1" "$2" "$3" "$OUTDIR" "$TRAIT_COL" \
-        "$GCTA" "$GEMMA" "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
+        "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" \
+        "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
     exit 0
 fi
 
 # ── batch ──
 if [ "$CMD" = "batch" ]; then
     echo "═══ easy-GWAS batch ═══"
-    echo "Output: $OUTDIR/{SNP,INDEL,SV}/"
     PHENO="$4"
-    bash "$SCRIPT_DIR/lib/run_gwas.sh" "$1" "$PHENO" SNP   "$OUTDIR" "$TRAIT_COL" "$GCTA" "$GEMMA" "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
-    bash "$SCRIPT_DIR/lib/run_gwas.sh" "$2" "$PHENO" INDEL "$OUTDIR" "$TRAIT_COL" "$GCTA" "$GEMMA" "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
-    bash "$SCRIPT_DIR/lib/run_gwas.sh" "$3" "$PHENO" SV    "$OUTDIR" "$TRAIT_COL" "$GCTA" "$GEMMA" "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
+    for vtype in SNP INDEL SV; do
+        case $vtype in
+            SNP) vcf="$1" ;;
+            INDEL) vcf="$2" ;;
+            SV) vcf="$3" ;;
+        esac
+        bash "$SCRIPT_DIR/lib/run_gwas.sh" "$vcf" "$PHENO" "$vtype" "$OUTDIR" "$TRAIT_COL" \
+            "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" \
+            "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
+    done
     echo ""; echo "═══ GWAS complete ═══"
-    echo "Results: $OUTDIR/{SNP,INDEL,SV}/gcta/gwas.loco.mlma"
-    echo "         $OUTDIR/{SNP,INDEL,SV}/gemma/*_gwas.assoc.txt"
+    echo "Results: $OUTDIR/{SNP,INDEL,SV}/"
     exit 0
 fi
 
 # ── plot ──
-PLOT_GEC=""
-PLOT_FMT="jpg"
+PLOT_GEC=""; PLOT_FMT="jpg"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --gec) PLOT_GEC="--gec"; shift;;
@@ -108,9 +103,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ "$CMD" = "plot" ]; then
-    GWAS_FILE="$1"
-    OUT_PREFIX="$2"
-    Rscript "$SCRIPT_DIR/lib/plot_gwas.R" "$GWAS_FILE" "$OUT_PREFIX" $PLOT_GEC "--$PLOT_FMT"
+    Rscript "$SCRIPT_DIR/lib/plot_gwas.R" "$1" "$2" $PLOT_GEC "--$PLOT_FMT"
     exit 0
 fi
 

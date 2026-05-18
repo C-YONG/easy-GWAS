@@ -1,5 +1,5 @@
 #!/bin/bash
-# easy-GWAS/install.sh — 下载 GCTA + GEMMA + GEC + JRE
+# easy-GWAS/install.sh — 下载 GCTA + GEMMA + LDAK + GEC + JRE
 set -euo pipefail
 BINDIR="$(cd "$(dirname "$0")" && pwd)/bin"
 mkdir -p "$BINDIR"
@@ -23,6 +23,13 @@ if [ ! -f gemma ]; then
     gunzip -f gemma-0.98.5-linux-static-AMD64.gz
     mv gemma-0.98.5-linux-static-AMD64 gemma && chmod +x gemma
     echo "  GEMMA: $(./gemma 2>&1 | head -1)"
+fi
+
+if [ ! -f ldak6.2 ]; then
+    echo "  Downloading LDAK..."
+    curl -sLO "https://raw.githubusercontent.com/dougspeed/LDAK/main/ldak6.2.linux"
+    mv ldak6.2.linux ldak6.2 && chmod +x ldak6.2
+    echo "  LDAK: $(./ldak6.2 2>&1 | grep "Version" | head -1)"
 fi
 
 if [ ! -f gec/gec.jar ]; then
