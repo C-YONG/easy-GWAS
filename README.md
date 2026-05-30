@@ -1,6 +1,6 @@
 # easy-GWAS
 
-**Four-method GWAS (GCTA-LOCO + GCTA-MLMA + GEMMA-LMM + LDAK-KVIK) with GEC support.**
+**Four-method GWAS (GCTA-LOCO + GCTA-MLMA + GEMMA-LMM + LDAK-KVIK) with auto-plotting and optional GEC.**
 
 ## Install
 
@@ -14,21 +14,26 @@ conda install -c bioconda bcftools plink2
 ## Quick start
 
 ```bash
-# Single variant type (4 methods)
+# Single variant type (4 methods, auto-plot with Bonferroni)
 easy-GWAS --pca 5 --out results/ single snp.vcf.gz pheno.csv SNP
+
+# GEC-corrected thresholds (opt-in)
+easy-GWAS --gec --pca 5 --out results/ single snp.vcf.gz pheno.csv SNP
 
 # Single method only
 easy-GWAS --method loco --out results/ single snp.vcf.gz pheno.csv SNP
 
-# Subset of methods
-easy-GWAS --method loco,gemma --out results/ single snp.vcf.gz pheno.csv SNP
+# Subset of methods with GEC
+easy-GWAS --gec --method loco,gemma --out results/ single snp.vcf.gz pheno.csv SNP
 
-# All three types
+# All three variant types (auto-plot per type)
 easy-GWAS --pca 5 --out results/ batch snp.vcf.gz indel.vcf.gz sv.vcf.gz pheno.csv
 
-# Manhattan + QQ plots (with GEC thresholds)
+# Manual plot (when auto-plot fails or custom prefix needed)
 easy-GWAS plot --gec results/SNP/gcta/gwas_loco.loco.mlma SNP_TD
 ```
+
+Plots are auto-generated after GWAS: `{TYPE}_trait{N}_{method}_Manhattan.jpg` + `_QQ.jpg` in each type's result directory.
 
 ## GWAS methods
 
@@ -46,11 +51,15 @@ easy-GWAS plot --gec results/SNP/gcta/gwas_loco.loco.mlma SNP_TD
 --trait N     Trait column (0=FID, 1=first trait, default: 1)
 --pca N       Number of PCs for LDAK-KVIK (default: 5, 0=skip KVIK)
 --method M    GWAS methods: all, loco, mlma, gemma, kvik (comma-separated, default: all)
+--gec         Use GEC-corrected significance thresholds (off by default)
 ```
+
+Without `--gec`, Bonferroni correction (0.05 / N_markers) is used for plot thresholds.
+With `--gec`, GEC computes effective independent tests for corrected thresholds.
 
 ## GEC
 
-The official GEC v0.2 (Li et al. 2012, pmglab.top) computes effective independent tests via eigenvalue decomposition of the LD matrix. Used for significance thresholds in plots.
+The official GEC v0.2 (Li et al. 2012, pmglab.top) computes effective independent tests via eigenvalue decomposition of the LD matrix. Used for significance thresholds in plots when `--gec` is passed.
 
 ## Output
 
@@ -63,8 +72,11 @@ results/SV/
 │   └── SV_gwas.assoc.txt     GEMMA (chr ps p_wald)
 ├── ldak/
 │   └── SV_kvik.step2.assoc   LDAK-KVIK (Wald_P)
-└── plink/
-    └── gec_out.sum           GEC Neff + thresholds
+├── plink/
+│   └── gec_out.sum           GEC Neff + thresholds (only with --gec)
+├── SV_trait1_loco_Manhattan.jpg   Auto-generated plot
+├── SV_trait1_loco_QQ.jpg          Auto-generated plot
+└── ...
 ```
 
 ## Filtering defaults

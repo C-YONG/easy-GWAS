@@ -5,8 +5,8 @@
 set -euo pipefail
 
 VCF="$1"; PHENO_CSV="$2"; TYPE="$3"; OUTDIR="$4"; TRAIT_COL="$5"
-GCTA="$6"; GEMMA="$7"; LDAK="$8"; N_PCA="${9:-5}"; METHOD="${10:-all}"
-MAF_SNP="${11}"; GENO_SNP="${12}"; MAF_INDEL="${13}"; GENO_INDEL="${14}"; MAF_SV="${15}"; GENO_SV="${16}"
+GCTA="$6"; GEMMA="$7"; LDAK="$8"; N_PCA="${9:-5}"; METHOD="${10:-all}"; DO_GEC="${11:-0}"
+MAF_SNP="${12}"; GENO_SNP="${13}"; MAF_INDEL="${14}"; GENO_INDEL="${15}"; MAF_SV="${16}"; GENO_SV="${17}"
 
 # Helper: check if a method should run
 run_method() { [[ "$METHOD" == "all" || ",$METHOD," == *",$1,"* ]]; }
@@ -26,7 +26,7 @@ exec > >(tee -a "$LOG") 2>&1
 echo "══════════════════════════════════════════════"
 echo "  easy-GWAS — $LABEL  |  $(date)"
 echo "  MAF>$MAF  missing<$GENO  trait_col=$TRAIT_COL  PCA=$N_PCA"
-echo "  methods: $METHOD"
+echo "  methods: $METHOD  gec: $([ "$DO_GEC" = "1" ] && echo on || echo off)"
 echo "══════════════════════════════════════════════"
 
 ERRORS=0
@@ -88,22 +88,27 @@ echo "  $N_VAR variants × $N_SAM samples"
 # ══ 3. GEC ══
 echo "[3/7] Computing GEC..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-JAVA="$(find "$SCRIPT_DIR/../bin/jre" -name java -type f 2>/dev/null | head -1)"
-if [ -n "$JAVA" ] && [ -f "$SCRIPT_DIR/../bin/gec/gec.jar" ]; then
-    $JAVA -jar -Xmx2g "$SCRIPT_DIR/../bin/gec/gec.jar" --effect-number \
-        --plink-binary "$TDIR/plink/${LABEL}" --genome --maf 0 \
-        --out "$TDIR/plink/gec_out" 2>/dev/null || true
-    if [ -f "$TDIR/plink/gec_out.sum" ]; then
-        N_EFF=$(awk 'NR==2{print $2}' "$TDIR/plink/gec_out.sum")
-        [ -z "$N_EFF" ] && N_EFF="$N_VAR"
-    else N_EFF="$N_VAR"; fi
+if [ "$DO_GEC" = "1" ]; then
+    JAVA="$(find "$SCRIPT_DIR/../bin/jre" -name java -type f 2>/dev/null | head -1)"
+    if [ -n "$JAVA" ] && [ -f "$SCRIPT_DIR/../bin/gec/gec.jar" ]; then
+        $JAVA -jar -Xmx2g "$SCRIPT_DIR/../bin/gec/gec.jar" --effect-number \
+            --plink-binary "$TDIR/plink/${LABEL}" --genome --maf 0 \
+            --out "$TDIR/plink/gec_out" 2>/dev/null || true
+        if [ -f "$TDIR/plink/gec_out.sum" ]; then
+            N_EFF=$(awk 'NR==2{print $2}' "$TDIR/plink/gec_out.sum")
+            [ -z "$N_EFF" ] && N_EFF="$N_VAR"
+        else N_EFF="$N_VAR"; fi
+    else
+        $PLINK --bfile "$TDIR/plink/${LABEL}" --indep-pairwise 50 5 0.2 \
+            --out "$TDIR/plink/${LABEL}_ld" --silent 2>/dev/null || true
+        N_EFF=$(wc -l < "$TDIR/plink/${LABEL}_ld.prune.in" 2>/dev/null || echo "$N_VAR")
+    fi
+    echo "  Neff = $N_EFF (GEC)"
 else
-    $PLINK --bfile "$TDIR/plink/${LABEL}" --indep-pairwise 50 5 0.2 \
-        --out "$TDIR/plink/${LABEL}_ld" --silent 2>/dev/null || true
-    N_EFF=$(wc -l < "$TDIR/plink/${LABEL}_ld.prune.in" 2>/dev/null || echo "$N_VAR")
+    N_EFF="$N_VAR"
+    echo "  Neff = $N_EFF (all markers, no GEC)"
 fi
 echo "$N_EFF" > "$TDIR/plink/.neff"
-echo "  Neff = $N_EFF (GEC)"
 
 # ══ 4. Phenotype ══
 echo "[4/7] Preparing phenotype..."

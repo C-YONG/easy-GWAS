@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 OUTDIR="./easy-gwas-out"
-TRAIT_COL=1; N_PCA=5; METHOD="all"
+TRAIT_COL=1; N_PCA=5; METHOD="all"; DO_GEC="0"; GEC=""
 MAF_SNP=0.05; GENO_SNP=0.05
 MAF_INDEL=0.05; GENO_INDEL=0.05
 MAF_SV=0.01; GENO_SV=0.20
@@ -18,6 +18,7 @@ while [[ $# -gt 0 ]]; do
         --trait) TRAIT_COL="$2"; shift 2;;
         --pca) N_PCA="$2"; shift 2;;
         --method) METHOD="$2"; shift 2;;
+        --gec) DO_GEC="1"; GEC="--gec"; shift;;
         -h|--help) CMD=help; shift;;
         *) break;;
     esac
@@ -41,7 +42,7 @@ Options:
   --trait N     Trait column (0=FID, 1=first trait, default: 1)
   --pca N       Number of PCs for LDAK-KVIK (default: 5, 0=skip KVIK)
   --method M    GWAS methods: all,loco,mlma,gemma,kvik (default: all)
-  --gec         GEC-corrected thresholds (plot only)
+  --gec         Use GEC-corrected thresholds (off by default)
 
 Phenotype CSV: FID,trait1,... (header, NA=missing)
 HELP
@@ -66,11 +67,44 @@ GCTA=$(find_tool gcta64)
 GEMMA=$(find_tool gemma)
 LDAK=$(find_tool ldak6.2 2>/dev/null || echo "")
 
+# ── auto_plot ──
+auto_plot() {
+    local type="$1" outdir="$2" trait_col="$3"
+    local tdir="$outdir/$type"
+    local prefix="${tdir}/${type}_trait${trait_col}"
+
+    if ! command -v Rscript &>/dev/null; then
+        echo "  (Rscript not found, skip plotting)"
+        return
+    fi
+
+    echo ""
+    echo "─── Auto-plotting $type ───"
+
+    for entry in \
+        "loco:$tdir/gcta/gwas_loco.loco.mlma:${prefix}_loco" \
+        "mlma:$tdir/gcta/gwas_mlma.mlma:${prefix}_mlma" \
+        "gemma:$tdir/gemma/${type}_gwas.assoc.txt:${prefix}_gemma" \
+        "kvik:$tdir/ldak/${type}_kvik.step2.assoc:${prefix}_kvik"; do
+        method="${entry%%:*}"
+        rest="${entry#*:}"
+        file="${rest%%:*}"
+        pfx="${rest#*:}"
+        if [ -f "$file" ]; then
+            echo "  Plotting $method..."
+            Rscript "$SCRIPT_DIR/lib/plot_gwas.R" "$file" "$pfx" $GEC 2>/dev/null && \
+                echo "    -> ${pfx}_Manhattan.jpg + _QQ.jpg" || \
+                echo "    Plot failed (R/CMplot may not be installed)"
+        fi
+    done
+}
+
 # ── single ──
 if [ "$CMD" = "single" ]; then
-        bash "$SCRIPT_DIR/lib/run_gwas.sh" "$1" "$2" "$3" "$OUTDIR" "$TRAIT_COL" \
-            "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" "$METHOD" \
-            "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
+    bash "$SCRIPT_DIR/lib/run_gwas.sh" "$1" "$2" "$3" "$OUTDIR" "$TRAIT_COL" \
+        "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" "$METHOD" "$DO_GEC" \
+        "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
+    auto_plot "$3" "$OUTDIR" "$TRAIT_COL"
     exit 0
 fi
 
@@ -85,8 +119,9 @@ if [ "$CMD" = "batch" ]; then
             SV) vcf="$3" ;;
         esac
         bash "$SCRIPT_DIR/lib/run_gwas.sh" "$vcf" "$PHENO" "$vtype" "$OUTDIR" "$TRAIT_COL" \
-            "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" "$METHOD" \
+            "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" "$METHOD" "$DO_GEC" \
             "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
+        auto_plot "$vtype" "$OUTDIR" "$TRAIT_COL"
     done
     echo ""; echo "═══ GWAS complete ═══"
     echo "Results: $OUTDIR/{SNP,INDEL,SV}/"
