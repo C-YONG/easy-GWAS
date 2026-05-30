@@ -5,8 +5,11 @@
 set -euo pipefail
 
 VCF="$1"; PHENO_CSV="$2"; TYPE="$3"; OUTDIR="$4"; TRAIT_COL="$5"
-GCTA="$6"; GEMMA="$7"; LDAK="$8"; N_PCA="${9:-5}"
-MAF_SNP="${10}"; GENO_SNP="${11}"; MAF_INDEL="${12}"; GENO_INDEL="${13}"; MAF_SV="${14}"; GENO_SV="${15}"
+GCTA="$6"; GEMMA="$7"; LDAK="$8"; N_PCA="${9:-5}"; METHOD="${10:-all}"
+MAF_SNP="${11}"; GENO_SNP="${12}"; MAF_INDEL="${13}"; GENO_INDEL="${14}"; MAF_SV="${15}"; GENO_SV="${16}"
+
+# Helper: check if a method should run
+run_method() { [[ "$METHOD" == "all" || ",$METHOD," == *",$1,"* ]]; }
 
 case "$TYPE" in
     SNP|snp)   MAF=$MAF_SNP; GENO=$GENO_SNP; LABEL="SNP" ;;
@@ -23,6 +26,7 @@ exec > >(tee -a "$LOG") 2>&1
 echo "══════════════════════════════════════════════"
 echo "  easy-GWAS — $LABEL  |  $(date)"
 echo "  MAF>$MAF  missing<$GENO  trait_col=$TRAIT_COL  PCA=$N_PCA"
+echo "  methods: $METHOD"
 echo "══════════════════════════════════════════════"
 
 ERRORS=0
@@ -125,6 +129,7 @@ print(f"  {n_valid} phenotyped, {len(fam_ids)} total")
 PYEOF
 
 # ══ 5. GCTA-LOCO ══
+if run_method loco; then
 echo "[5/7] GCTA LOCO GWAS..."
 if $GCTA --mlma-loco --bfile "$TDIR/plink/${LABEL}" \
     --pheno "$TDIR/gcta/pheno.txt" \
@@ -133,8 +138,12 @@ if $GCTA --mlma-loco --bfile "$TDIR/plink/${LABEL}" \
 else
     ERRORS=$((ERRORS+1)); echo "  GCTA-LOCO: FAILED"
 fi
+else
+    echo "[5/7] GCTA-LOCO: skipped"
+fi
 
 # ══ 6. GCTA-MLMA ══
+if run_method mlma; then
 echo "[6/7] GCTA MLMA GWAS..."
 if $GCTA --bfile "$TDIR/plink/${LABEL}" --make-grm-bin \
     --out "$TDIR/gcta/grm" --threads 8 2>"$TDIR/gcta/gcta_grm.err" && \
@@ -145,8 +154,12 @@ if $GCTA --bfile "$TDIR/plink/${LABEL}" --make-grm-bin \
 else
     ERRORS=$((ERRORS+1)); echo "  GCTA-MLMA: FAILED"
 fi
+else
+    echo "[6/7] GCTA-MLMA: skipped"
+fi
 
 # ══ 7. GEMMA ══
+if run_method gemma; then
 echo "[7/7] GEMMA GWAS..."
 awk '{$6=0; print}' OFS='\t' "$TDIR/plink/${LABEL}.fam" > "$TDIR/gemma/${LABEL}.fam"
 cp "$TDIR/plink/${LABEL}.bed" "$TDIR/gemma/${LABEL}.bed"
@@ -162,8 +175,12 @@ else
     ERRORS=$((ERRORS+1)); echo "  GEMMA: FAILED"
 fi
 cd - > /dev/null
+else
+    echo "[7/7] GEMMA: skipped"
+fi
 
 # ══ 8. LDAK-KVIK + PCA ══
+if run_method kvik; then
 if [ -n "${LDAK:-}" ] && [ -x "$LDAK" ]; then
     echo "  LDAK-KVIK + ${N_PCA}PCs..."
 
@@ -207,14 +224,20 @@ if [ -n "${LDAK:-}" ] && [ -x "$LDAK" ]; then
 else
     echo "  LDAK-KVIK: skipped (not installed)"
 fi
+else
+    echo "  LDAK-KVIK: skipped"
+fi
 
 # ══ Summary ══
 echo ""
 echo "═══ $LABEL GWAS complete ═══"
-echo "  GCTA-LOCO:   $TDIR/gcta/gwas_loco.loco.mlma"
-echo "  GCTA-MLMA:   $TDIR/gcta/gwas_mlma.mlma"
-echo "  GEMMA:       $TDIR/gemma/${LABEL}_gwas.assoc.txt"
-[ -f "$TDIR/ldak/${LABEL}_kvik.step2.assoc" ] && \
+run_method loco && [ -f "$TDIR/gcta/gwas_loco.loco.mlma" ] && \
+    echo "  GCTA-LOCO:   $TDIR/gcta/gwas_loco.loco.mlma"
+run_method mlma && [ -f "$TDIR/gcta/gwas_mlma.mlma" ] && \
+    echo "  GCTA-MLMA:   $TDIR/gcta/gwas_mlma.mlma"
+run_method gemma && [ -f "$TDIR/gemma/${LABEL}_gwas.assoc.txt" ] && \
+    echo "  GEMMA:       $TDIR/gemma/${LABEL}_gwas.assoc.txt"
+run_method kvik && [ -f "$TDIR/ldak/${LABEL}_kvik.step2.assoc" ] && \
     echo "  LDAK-KVIK:   $TDIR/ldak/${LABEL}_kvik.step2.assoc"
 if [ $ERRORS -gt 0 ]; then
     echo "  WARNING: $ERRORS tool(s) failed — check *.err files"

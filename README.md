@@ -17,6 +17,12 @@ conda install -c bioconda bcftools plink2
 # Single variant type (4 methods)
 easy-GWAS --pca 5 --out results/ single snp.vcf.gz pheno.csv SNP
 
+# Single method only
+easy-GWAS --method loco --out results/ single snp.vcf.gz pheno.csv SNP
+
+# Subset of methods
+easy-GWAS --method loco,gemma --out results/ single snp.vcf.gz pheno.csv SNP
+
 # All three types
 easy-GWAS --pca 5 --out results/ batch snp.vcf.gz indel.vcf.gz sv.vcf.gz pheno.csv
 
@@ -39,6 +45,7 @@ easy-GWAS plot --gec results/SNP/gcta/gwas_loco.loco.mlma SNP_TD
 --out DIR     Output directory (default: ./easy-gwas-out)
 --trait N     Trait column (0=FID, 1=first trait, default: 1)
 --pca N       Number of PCs for LDAK-KVIK (default: 5, 0=skip KVIK)
+--method M    GWAS methods: all, loco, mlma, gemma, kvik (comma-separated, default: all)
 ```
 
 ## GEC

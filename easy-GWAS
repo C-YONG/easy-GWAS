@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 OUTDIR="./easy-gwas-out"
-TRAIT_COL=1; N_PCA=5
+TRAIT_COL=1; N_PCA=5; METHOD="all"
 MAF_SNP=0.05; GENO_SNP=0.05
 MAF_INDEL=0.05; GENO_INDEL=0.05
 MAF_SV=0.01; GENO_SV=0.20
@@ -17,6 +17,7 @@ while [[ $# -gt 0 ]]; do
         --out) OUTDIR="$2"; shift 2;;
         --trait) TRAIT_COL="$2"; shift 2;;
         --pca) N_PCA="$2"; shift 2;;
+        --method) METHOD="$2"; shift 2;;
         -h|--help) CMD=help; shift;;
         *) break;;
     esac
@@ -39,6 +40,7 @@ Options:
   --out DIR     Output directory (default: ./easy-gwas-out)
   --trait N     Trait column (0=FID, 1=first trait, default: 1)
   --pca N       Number of PCs for LDAK-KVIK (default: 5, 0=skip KVIK)
+  --method M    GWAS methods: all,loco,mlma,gemma,kvik (default: all)
   --gec         GEC-corrected thresholds (plot only)
 
 Phenotype CSV: FID,trait1,... (header, NA=missing)
@@ -66,9 +68,9 @@ LDAK=$(find_tool ldak6.2 2>/dev/null || echo "")
 
 # ── single ──
 if [ "$CMD" = "single" ]; then
-    bash "$SCRIPT_DIR/lib/run_gwas.sh" "$1" "$2" "$3" "$OUTDIR" "$TRAIT_COL" \
-        "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" \
-        "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
+        bash "$SCRIPT_DIR/lib/run_gwas.sh" "$1" "$2" "$3" "$OUTDIR" "$TRAIT_COL" \
+            "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" "$METHOD" \
+            "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
     exit 0
 fi
 
@@ -83,7 +85,7 @@ if [ "$CMD" = "batch" ]; then
             SV) vcf="$3" ;;
         esac
         bash "$SCRIPT_DIR/lib/run_gwas.sh" "$vcf" "$PHENO" "$vtype" "$OUTDIR" "$TRAIT_COL" \
-            "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" \
+            "$GCTA" "$GEMMA" "$LDAK" "$N_PCA" "$METHOD" \
             "$MAF_SNP" "$GENO_SNP" "$MAF_INDEL" "$GENO_INDEL" "$MAF_SV" "$GENO_SV"
     done
     echo ""; echo "═══ GWAS complete ═══"
